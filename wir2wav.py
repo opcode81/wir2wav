@@ -56,6 +56,12 @@ class WIR:
         return f"WIR[{self.path}, {self.numChannels} channels [{' + '.join(chanStrings)}], {self.framerate} Hz, {self.durationSecs():.3f} secs]"
 
     def dataWithChannelRemoved(self, channelIdx):
+        """
+        Computes audio stream data where one channel has been removed
+
+        :param channelIdx: the 0-based index of the channel to be dropped
+        :return: the raw audio data without the removed channel's data
+        """
         buf = io.BytesIO()
         framesize = self.numChannels * 4
         offs = 0
@@ -67,20 +73,22 @@ class WIR:
             offs += framesize
         return buf.getvalue()
 
-    def writeWav(self, path, removeMonoChannel=True):
+    def writeWav(self, path, removeAdditionalMonoChannel=True):
         """
+        Writes this WIR's audio data to a standard .wav file
+
         :param path: the path of the wave file to write to
-        :param removeMonoChannel: whether to remove an additional mono channel (if further channels are available), e.g.
+        :param removeAdditionalMonoChannel: whether to remove an additional mono channel (if further channels are available), e.g.
             to remove the mono channel for the case where an additional stereo channel is available
         """
         hasAdditionalMonoChannel = self.channelsMask & Channels.MONO.value > 0 and self.channelsMask != Channels.MONO.value
-        if hasAdditionalMonoChannel and removeMonoChannel:
+        if hasAdditionalMonoChannel and removeAdditionalMonoChannel:
             data = self.dataWithChannelRemoved(0)
             numChannels = self.numChannels-1
         else:
             data = self.data
             numChannels = self.numChannels
-        print(f"Writing wave file {path} with {numChannels} for {wir} ...")
+        print(f"Writing wave file {path} with {numChannels} channels for {wir} ...")
         byteCount = len(data)
         sampleRate = self.framerate
         with open(path, "wb") as wav:
@@ -100,12 +108,13 @@ class WIR:
 
 
 if __name__ == '__main__':
-    print("\nwir2wav - Converts .wir files in the current directory to .wav files\n")
+    print("\nwir2wav - Converts .wir impulse response files recursively found in the current directory to .wav files\n")
     numConversions = 0
-    for fn in os.listdir("."):
-        if fnmatch(fn, "*.wir"):
-            wir = WIR(fn)
-            wavfn = os.path.splitext(fn)[0] + ".wav"
-            wir.writeWav(wavfn)
-            numConversions += 1
+    for path, dirs, files in os.walk("."):
+        for fn in files:
+            if fnmatch(fn, "*.wir"):
+                wir = WIR(os.path.join(path, fn))
+                wavfn = os.path.splitext(fn)[0] + ".wav"
+                wir.writeWav(os.path.join(path, wavfn))
+                numConversions += 1
     print(f"{numConversions} files found/converted.")
