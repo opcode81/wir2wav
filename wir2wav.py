@@ -1,5 +1,4 @@
 import struct
-import wave
 import io
 from enum import Enum
 from fnmatch import fnmatch
@@ -74,7 +73,6 @@ class WIR:
         :param removeMonoChannel: whether to remove an additional mono channel (if further channels are available), e.g.
             to remove the mono channel for the case where an additional stereo channel is available
         """
-        wav = wave.open(path, mode="wb")
         hasAdditionalMonoChannel = self.channelsMask & Channels.MONO.value > 0 and self.channelsMask != Channels.MONO.value
         if hasAdditionalMonoChannel and removeMonoChannel:
             data = self.dataWithChannelRemoved(0)
@@ -83,16 +81,31 @@ class WIR:
             data = self.data
             numChannels = self.numChannels
         print(f"Writing wave file {path} with {numChannels} for {wir} ...")
-        wav.setsampwidth(4)
-        wav.setnchannels(numChannels)
-        wav.setframerate(self.framerate)
-        wav.writeframes(data)
-        wav.close()
+        byteCount = len(data)
+        sampleRate = self.framerate
+        with open(path, "wb") as wav:
+            wav.write(struct.pack('<ccccIccccccccIHHIIHH',
+                b'R', b'I', b'F', b'F',
+                byteCount + 0x2c - 8,  # header size
+                b'W', b'A', b'V', b'E', b'f', b'm', b't', b' ',
+                0x10,  # size of 'fmt ' header
+                3,  # format 3 = floating-point PCM
+                numChannels,  # channels
+                sampleRate,  # samples / second
+                numChannels * sampleRate * 4,  # bytes / second
+                4,  # block alignment
+                32))  # bits / sample
+            wav.write(struct.pack('<ccccI', b'd', b'a', b't', b'a', byteCount))
+            wav.write(data)
 
 
 if __name__ == '__main__':
+    print("\nwir2wav - Converts .wir files in the current directory to .wav files\n")
+    numConversions = 0
     for fn in os.listdir("."):
         if fnmatch(fn, "*.wir"):
             wir = WIR(fn)
             wavfn = os.path.splitext(fn)[0] + ".wav"
             wir.writeWav(wavfn)
+            numConversions += 1
+    print(f"{numConversions} files found/converted.")
