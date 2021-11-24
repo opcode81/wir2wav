@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import struct
 import io
 from enum import Enum
